@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<robot name="hubert_stekchef" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ========== Materials (optional) ========== -->
+  <material name="grey">
+    <color rgba="0.7 0.7 0.7 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.2 0.4 0.9 1.0"/>
+  </material>
+
+  <!-- ========== Links ========== -->
+  <!-- Grounded base that does NOT move -->
+  <link name="base_fixed">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.08" length="0.04"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- Rotating base (turntable) driven by base_yaw -->
+  <link name="base_rot">
+    <visual>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.07" length="0.02"/></geometry>
+      <material name="blue"/>
+    </visual>
+  </link>
+
+  <!-- Vertical offset: +0.336 m in Z -->
+  <link name="link_vertical">
+    <visual>
+      <!-- draw a slender cylinder up the vertical run -->
+      <origin xyz="0 0 0.168" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.01" length="0.336"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- Right offset: +0.107 m in X -->
+  <link name="link_right">
+    <visual>
+      <!-- cylinder along X: rotate 90 deg about Y -->
+      <origin xyz="0.0535 0 0" rpy="0 1.57079632679 0"/>
+      <geometry><cylinder radius="0.01" length="0.107"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- Forward offset: +0.032 m in Y -->
+  <link name="link_forward">
+    <visual>
+      <!-- cylinder along Y: rotate -90 deg about X -->
+      <origin xyz="0 0.016 0" rpy="-1.57079632679 0 0"/>
+      <geometry><cylinder radius="0.01" length="0.032"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- Upper arm: 0.163 m down along -Z from shoulder_pitch -->
+  <link name="upper_arm">
+    <visual>
+      <origin xyz="0 0 -0.0815" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.012" length="0.163"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- Forearm: 0.21 m down along -Z from elbow_pitch -->
+  <link name="forearm">
+    <visual>
+      <origin xyz="0 0 -0.105" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.012" length="0.21"/></geometry>
+      <material name="grey"/>
+    </visual>
+  </link>
+
+  <!-- End effector placeholder -->
+  <link name="end_effector">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="0.015"/></geometry>
+      <material name="blue"/>
+    </visual>
+  </link>
+
+  <!-- ========== Joints ========== -->
+
+  <!-- Base yaw: rotation around global Z at the base -->
+  <joint name="base_yaw" type="continuous">
+    <parent link="base_fixed"/>
+    <child  link="base_rot"/>
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- Fixed: +0.336 m in Z -->
+  <joint name="base_to_vertical" type="fixed">
+    <parent link="base_rot"/>
+    <child  link="link_vertical"/>
+    <origin xyz="0 0 0.336" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Fixed: +0.107 m in X -->
+  <joint name="vertical_to_right" type="fixed">
+    <parent link="link_vertical"/>
+    <child  link="link_right"/>
+    <origin xyz="0.107 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Fixed: +0.032 m in Y -->
+  <joint name="right_to_forward" type="fixed">
+    <parent link="link_right"/>
+    <child  link="link_forward"/>
+    <origin xyz="0 0.032 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Shoulder joint: 1-DoF about X at this location -->
+  <joint name="shoulder_pitch" type="revolute">
+    <parent link="link_forward"/>
+    <child  link="upper_arm"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <!-- Adjust limits as needed -->
+    <limit lower="-3.14159" upper="3.14159" effort="20" velocity="2.0"/>
+  </joint>
+
+  <!-- Elbow joint: 1-DoF about X, located 0.163 m down along the upper arm -->
+  <joint name="elbow_pitch" type="revolute">
+    <parent link="upper_arm"/>
+    <child  link="forearm"/>
+    <origin xyz="0 0 -0.163" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <!-- Adjust limits as needed -->
+    <limit lower="-3.14159" upper="3.14159" effort="15" velocity="2.0"/>
+  </joint>
+
+  <!-- Fixed: 0.21 m down along the forearm to the end effector -->
+  <joint name="wrist_fixed" type="fixed">
+    <parent link="forearm"/>
+    <child  link="end_effector"/>
+    <origin xyz="0 0 -0.21" rpy="0 0 0"/>
+  </joint>
+
+</robot>
