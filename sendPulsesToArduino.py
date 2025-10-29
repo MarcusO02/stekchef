@@ -7,12 +7,15 @@ from inverseKinematics import compute_pulses_from_xyz, build_chain
 from getPositions import getPositions          # red object stream (pick)
 from getPanPositions import getPanPositions    # green/black pan stream (place)
 from approach_path import plan_adaptive        # shoulder-aligned adaptive path
+from voice_dialog import run_start_and_doneness_dialog
 
 sys.stdout.reconfigure(line_buffering=True)
 
 # ---------------- Robot-frame config ----------------
 SHOULDER_XY_ROBOT = np.array([-0.1079, 0.0], dtype=float)
 SHOULDER_XY_ROBOT2 = np.array([0.05, 0.0], dtype=float)
+
+COOK_TIME_S = None  # set from voice dialog
 
 # Home pose
 HOME_US = (1405, 1914, 2110)
@@ -75,7 +78,7 @@ def wait_for_ready(ser, timeout_s=READY_TIMEOUT_S, pump_gui=True):
 # ---------------- Helpers ----------------
 # Put near top of send_pulses.py
 TCP_FORWARD_OFFSET = -0.020   # 20 mm forward of your modeled TCP (tune)
-TCP_LATERAL_OFFSET = 0.030   # if you know it’s a bit left/right, add here too
+TCP_LATERAL_OFFSET = 0.050   # if you know it’s a bit left/right, add here too
 TCP_Z_OFFSET       = 0.000   # vertical bias if needed (usually 0)
 
 def yaw_rotated_tcp_offset(target_xyz, shoulder_xy):
@@ -155,6 +158,7 @@ class Phase(Enum):
     OPEN_AGAIN = auto()
     MOVE_TO_PRE3 = auto()
     MOVE_HOME_FINAL = auto()
+    PAUSE = auto()
     
     # Return to original position cycle
     RETURN_TO_PAN = auto()
@@ -187,6 +191,17 @@ def main(test=False, port="COM3"):
     # Perception streams:
     positions_obj = get_mock_positions() if test else getPositions(show=show_flag)
     positions_pan = get_mock_positions() if test else getPanPositions(show=show_flag)
+
+    global COOK_TIME_S
+    # Allow disabling voice via --no-voice flag
+    no_voice = "--no-voice" in sys.argv
+    try:
+        cook_secs, human_label = run_start_and_doneness_dialog(use_voice=(not no_voice))
+        COOK_TIME_S = float(cook_secs)
+        print(f"[VOICE] Doneness: {human_label}, pause set to {COOK_TIME_S:.1f}s")
+    except Exception as e:
+        print(f"[VOICE] Voice dialog failed ({e}); falling back to default 5s.")
+        COOK_TIME_S = 5.0
 
     phase = Phase.INIT_HOME
     target_xyz = None
@@ -372,8 +387,9 @@ def main(test=False, port="COM3"):
 
             # -------- Second cycle (re-pick with ARC from the pan) --------
             elif phase == Phase.PAUSE_AT_HOME:
-                print("[PAUSE_AT_HOME] Waiting 5 seconds before re-pick")
-                time.sleep(5.0)
+                duration = COOK_TIME_S if (COOK_TIME_S is not None) else 5.0
+                print(f"[PAUSE_AT_HOME] Waiting {duration:.1f} seconds before re-pick")
+                time.sleep(duration)
                 phase = Phase.FIND_OBJECT_AGAIN
 
             elif phase == Phase.FIND_OBJECT_AGAIN:
@@ -469,14 +485,14 @@ def main(test=False, port="COM3"):
                     desired_z = float(target2[2])
                 elif last_pan_xyz is not None:
                     # place a little above the pan center height
-                    desired_z = float(last_pan_xyz[2] + PAN_Z_OFFSET - 0.02)
+                    desired_z = float(last_pan_xyz[2] + PAN_Z_OFFSET - 0.04)
                 else:
                     # fallback: a small drop relative to the arc end
-                    desired_z = float(endz - 0.06)
+                    desired_z = float(endz - 0.08)
 
                 lower = np.array([cur_x, cur_y, desired_z], dtype=float)
                 goto_xyz(lower, chain, ser, test, label="Lower straight down")
-                time.sleep(1)
+                time.sleep(2)
                 phase = Phase.OPEN_AGAIN
 
             elif phase == Phase.OPEN_AGAIN:
@@ -507,7 +523,15 @@ def main(test=False, port="COM3"):
                     wait_for_ready(ser)
                 else:
                     print(f"Home pulses: {HOME_US}")
-                    time.sleep(2)
+                    duration = COOK_TIME_S if (COOK_TIME_S is not None) else 5.0
+                    print(f"[PAUSE_AT_HOME] Waiting {duration:.1f} seconds before re-pick")
+                    time.sleep(duration)                
+                phase = Phase.PAUSE
+            
+            elif phase == Phase.PAUSE:
+                duration = COOK_TIME_S if (COOK_TIME_S is not None) else 5.0
+                print(f"[PAUSE_AT_HOME] Waiting {duration:.1f} seconds before re-pick")
+                time.sleep(duration)
                 phase = Phase.RETURN_TO_PAN
 
             elif phase == Phase.RETURN_TO_PAN:
